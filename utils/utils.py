@@ -2,6 +2,12 @@ import ee
 import pandas as pd
 import os
 import calendar
+import openmeteo_requests
+import requests_cache
+from retry_requests import retry
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
 
 
 def connect_googleengine():
@@ -69,4 +75,83 @@ def add_NDVI_feature(data):
     print('Full data itterated. New feature -NDVI- added.')
     data['NDVI'] = ndvis
     return data
+
+
+def add_weather_info(data):
+    entries = []
+    cache = dict()
+    count_requests = 0
+    for ind, row in data.iterrows():
+        print(f'Now calculating for row {ind}')
+        # Truncate the timestamp to hours
+        timestamp_utc_truncated = row['timestamp'].tz_localize('UTC').tz_convert('UTC').floor('H')
+        # Setup the Open-Meteo API client with cache and retry on error
+        cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+        retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+        openmeteo = openmeteo_requests.Client(session=retry_session)
+
+        # Make sure all required weather variables are listed here
+        # The order of variables in hourly or daily is important to assign them correctly below
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": row['location-long'],
+            "longitude": row['location-lat'],
+            "start_date": row['timestamp'].strftime('%Y-%m-%d'),
+            "end_date": row['timestamp'].strftime('%Y-%m-%d'),
+            "hourly": ["temperature_2m", "relative_humidity_2m", "rain", "surface_pressure", "cloud_cover",
+                       "wind_speed_100m"]
+        }
+        cache_key = f"{round(row['location-long'],2)} {round(row['location-lat'],2)} {row['timestamp'].strftime('%Y-%m-%d')}"
+        print(cache_key)
+        try:
+            if cache_key in cache:
+                response = cache[cache_key]
+            else:
+                responses = openmeteo.weather_api(url, params=params)
+                print('-----Request for API')
+                count_requests +=1
+                response = responses[0]
+                cache[cache_key] =  response
+
+            # Process hourly data. The order of variables needs to be the same as requested.
+            hourly = response.Hourly()
+            hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+            hourly_relative_humidity_2m = hourly.Variables(1).ValuesAsNumpy()
+            hourly_rain = hourly.Variables(2).ValuesAsNumpy()
+            hourly_surface_pressure = hourly.Variables(3).ValuesAsNumpy()
+            hourly_cloud_cover = hourly.Variables(4).ValuesAsNumpy()
+            hourly_wind_speed_100m = hourly.Variables(5).ValuesAsNumpy()
+
+            hourly_data = {"date": pd.date_range(
+                start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+                end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+                freq=pd.Timedelta(seconds=hourly.Interval()),
+                inclusive="left"
+            )}
+            hourly_data["temperature_2m"] = hourly_temperature_2m
+            hourly_data["relative_humidity_2m"] = hourly_relative_humidity_2m
+            hourly_data["rain"] = hourly_rain
+            hourly_data["surface_pressure"] = hourly_surface_pressure
+            hourly_data["cloud_cover"] = hourly_cloud_cover
+            hourly_data["wind_speed_100m"] = hourly_wind_speed_100m
+
+            hourly_dataframe = pd.DataFrame(data=hourly_data)
+            selected_dataframe = hourly_dataframe[hourly_dataframe['date'] == timestamp_utc_truncated]
+            selected_dataframe = selected_dataframe.drop(['date'], axis=1)
+
+            # Append the selected_dataframe to the new_row
+            new_row = pd.concat([row, selected_dataframe.iloc[0]], axis=0)
+
+            # Update the row in the DataFrame
+            entries.append(new_row)
+        except:
+            print(f'Last index processed {ind}')
+            break
+
+    new_data = pd.DataFrame.from_records(entries)
+    new_data = new_data.drop(["Unnamed: 0.1", "Unnamed: 0"], axis=1)
+
+    print(f'Number of requests to Open-Meteo API {count_requests}')
+    return new_data
+
 
