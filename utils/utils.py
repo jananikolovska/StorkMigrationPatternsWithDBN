@@ -104,7 +104,6 @@ def add_weather_info(data):
                        "wind_speed_100m"]
         }
         cache_key = f"{round(row['location-long'],2)} {round(row['location-lat'],2)} {row['timestamp'].strftime('%Y-%m-%d')}"
-        print(cache_key)
         try:
             if cache_key in cache:
                 response = cache[cache_key]
@@ -172,11 +171,8 @@ def last_location(values):
 
 def group_weekly(data):
     concatenated_df = pd.DataFrame()
-    print(len(list(set(data['tag-local-identifier']))))
     for selected_id in list(set(data['tag-local-identifier'])):
-        print(selected_id)
         selected_data = data[data['tag-local-identifier'] == selected_id].reset_index(drop=True)
-        print(selected_data.shape)
 
         # Order DataFrame by 'timestamp'
         selected_data.sort_values(by='timestamp', inplace=True)
@@ -198,6 +194,4 @@ def group_weekly(data):
         concatenated_df = pd.concat([concatenated_df, result])
     #concatenated_df['distance_traveled_discretized'] = pd.cut(concatenated_df['distance-traveled'], bins=3,
     #                                                          labels=[0, 1, 2])
-    print(concatenated_df.shape)
     return concatenated_df
-
