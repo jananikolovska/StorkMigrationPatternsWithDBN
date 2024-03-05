@@ -1,0 +1,1 @@
+{'NDVI': {0: '> 0.17'}, 'Temperature': {0: '< 16.19', 1: '> 24.19'}, 'RelativeHumidity': {0: '> 54.96'}, 'Rain': {0: '> 0.0'}, 'SurfacePressure': {0: '> 979.41'}, 'CloudCover': {0: '> 14.05'}, 'WindSpeed': {0: '> 21.84'}, 'Migrating': {0: '> 702.13'}}
