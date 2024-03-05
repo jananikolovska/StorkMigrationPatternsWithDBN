@@ -2,6 +2,8 @@ import ee
 import pandas as pd
 import os
 import calendar
+from geopy.distance import geodesic
+import numpy as np
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
@@ -144,7 +146,8 @@ def add_weather_info(data):
 
             # Update the row in the DataFrame
             entries.append(new_row)
-        except:
+        except Exception as e:
+            print(e)
             print(f'Last index processed {ind}')
             break
 
@@ -154,4 +157,41 @@ def add_weather_info(data):
     print(f'Number of requests to Open-Meteo API {count_requests}')
     return new_data
 
+def calculate_distance(row, data):
+    if row.name == 0:
+        # If it's the first row, return NaN or skip the computation
+        return np.nan  # For example, return NaN as distance
+    else:
+        prev_row = data.iloc[row.name - 1]
+        prev_location = (prev_row['location-lat'], prev_row['location-long'])
+        curr_location = (row['location-lat'], row['location-long'])
+        return geodesic(prev_location, curr_location).kilometers
+
+def group_weekly(data):
+    concatenated_df = pd.DataFrame()
+    print(len(list(set(data['tag-local-identifier']))))
+    for selected_id in list(set(data['tag-local-identifier'])):
+        print(selected_id)
+        selected_data = data[data['tag-local-identifier'] == selected_id].reset_index(drop=True)
+        print(selected_data.shape)
+
+        # Order DataFrame by 'timestamp'
+        selected_data.sort_values(by='timestamp', inplace=True)
+
+        selected_data['distance-traveled'] = selected_data.apply(lambda row: calculate_distance(row, selected_data),
+                                                                 axis=1)
+
+        selected_data = selected_data.dropna()
+        result = (selected_data.groupby(['tag-local-identifier', pd.Grouper(key='timestamp', freq='W-MON')])
+                  .agg({'NDVI': 'mean', 'temperature_2m': 'mean',
+                        'relative_humidity_2m': 'mean', 'rain': 'mean',
+                        'surface_pressure': 'mean', 'cloud_cover': 'mean',
+                        'wind_speed_100m': 'mean', 'distance-traveled': 'sum'}).reset_index())
+
+        print(result.shape)
+        concatenated_df = pd.concat([concatenated_df, result])
+    concatenated_df['distance_traveled_discretized'] = pd.cut(concatenated_df['distance-traveled'], bins=3,
+                                                              labels=[0, 1, 2])
+    print(concatenated_df.shape)
+    return concatenated_df
 
