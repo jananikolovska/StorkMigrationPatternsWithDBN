@@ -167,6 +167,9 @@ def calculate_distance(row, data):
         curr_location = (row['location-lat'], row['location-long'])
         return geodesic(prev_location, curr_location).kilometers
 
+def last_location(values):
+    return values.iloc[-1]
+
 def group_weekly(data):
     concatenated_df = pd.DataFrame()
     print(len(list(set(data['tag-local-identifier']))))
@@ -178,7 +181,7 @@ def group_weekly(data):
         # Order DataFrame by 'timestamp'
         selected_data.sort_values(by='timestamp', inplace=True)
 
-        selected_data['distance-traveled'] = selected_data.apply(lambda row: calculate_distance(row, selected_data),
+        selected_data['distance-flown'] = selected_data.apply(lambda row: calculate_distance(row, selected_data),
                                                                  axis=1)
 
         selected_data = selected_data.dropna()
@@ -186,12 +189,15 @@ def group_weekly(data):
                   .agg({'NDVI': 'mean', 'temperature_2m': 'mean',
                         'relative_humidity_2m': 'mean', 'rain': 'mean',
                         'surface_pressure': 'mean', 'cloud_cover': 'mean',
-                        'wind_speed_100m': 'mean', 'distance-traveled': 'sum'}).reset_index())
-
-        print(result.shape)
+                        'wind_speed_100m': 'mean', 'distance-flown': 'sum',
+                        'location-lat': last_location,
+                        'location-long': last_location})
+                  .reset_index())
+        result['distance-traveled'] = result.apply(lambda row: calculate_distance(row, result),
+                                                              axis=1)
         concatenated_df = pd.concat([concatenated_df, result])
-    concatenated_df['distance_traveled_discretized'] = pd.cut(concatenated_df['distance-traveled'], bins=3,
-                                                              labels=[0, 1, 2])
+    #concatenated_df['distance_traveled_discretized'] = pd.cut(concatenated_df['distance-traveled'], bins=3,
+    #                                                          labels=[0, 1, 2])
     print(concatenated_df.shape)
     return concatenated_df
 
