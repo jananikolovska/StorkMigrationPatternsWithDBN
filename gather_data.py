@@ -13,8 +13,6 @@ warnings.filterwarnings('ignore')
 data = pd.read_csv('StorkMigrationWithNDVI.csv')
 data['timestamp'] = pd.to_datetime(data['timestamp'])
 print(data.shape)
-data = add_weather_info(data)
-data.to_csv(os.path.join("data","StorkMigrationWithNDVIWeather-2.csv"))
-
-
-
+data = add_weather_info(data[211779:])
+data.to_csv(os.path.join("data","StorkMigrationWithNDVIWeather-15.csv"))
+print('Data to csv')
